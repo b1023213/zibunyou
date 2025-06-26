@@ -1,13 +1,11 @@
 import 'dart:io';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:geolocator/geolocator.dart';
-
-void main() {
-  runApp(const MyApp());
-}
+import 'package:shared_preferences/shared_preferences.dart';
 
 class MyApp extends StatelessWidget {
   const MyApp({Key? key}) : super(key: key);
@@ -18,10 +16,28 @@ class MyApp extends StatelessWidget {
   }
 }
 
+void main() {
+  runApp(const MyApp());
+}
+
 class ImageWithLocation {
   final File image;
   final LatLng location;
   ImageWithLocation(this.image, this.location);
+
+  // 追加: Map形式に変換
+  Map<String, dynamic> toMap() => {
+        'path': image.path,
+        'lat': location.latitude,
+        'lng': location.longitude,
+      };
+
+  // 追加: Mapから復元
+  static ImageWithLocation fromMap(Map<String, dynamic> map) =>
+      ImageWithLocation(
+        File(map['path']),
+        LatLng(map['lat'], map['lng']),
+      );
 }
 
 class MyHomePage extends StatefulWidget {
@@ -33,7 +49,31 @@ class MyHomePage extends StatefulWidget {
 class _MyHomePageState extends State<MyHomePage> {
   final picker = ImagePicker();
   final List<ImageWithLocation> _images = [];
-  final MapController _mapController = MapController(); // 追加
+  final MapController _mapController = MapController();
+
+  @override
+  void initState() {
+    super.initState();
+    _loadImages();
+  }
+
+  Future<void> _saveImages() async {
+    final prefs = await SharedPreferences.getInstance();
+    final data = _images.map((img) => img.toMap()).toList();
+    prefs.setString('images', jsonEncode(data));
+  }
+
+  Future<void> _loadImages() async {
+    final prefs = await SharedPreferences.getInstance();
+    final jsonStr = prefs.getString('images');
+    if (jsonStr != null) {
+      final List<dynamic> data = jsonDecode(jsonStr);
+      setState(() {
+        _images.clear();
+        _images.addAll(data.map((e) => ImageWithLocation.fromMap(e)));
+      });
+    }
+  }
 
   Future<void> _getImage(ImageSource source) async {
     LocationPermission permission = await Geolocator.requestPermission();
@@ -55,6 +95,7 @@ class _MyHomePageState extends State<MyHomePage> {
           ),
         );
       });
+      _saveImages(); // 追加: 保存
     }
   }
 
@@ -79,7 +120,7 @@ class _MyHomePageState extends State<MyHomePage> {
     return Scaffold(
       appBar: AppBar(title: const Text('OpenStreetMapにピン止め')),
       body: FlutterMap(
-        mapController: _mapController, // 追加
+        mapController: _mapController,
         options: MapOptions(
           initialCenter: LatLng(35.681236, 139.767125),
           initialZoom: 12,
@@ -110,6 +151,7 @@ class _MyHomePageState extends State<MyHomePage> {
                     setState(() {
                       _images.removeAt(index);
                     });
+                    _saveImages(); // 追加: 削除時も保存
                   },
                   child: const Icon(Icons.location_on,
                       color: Colors.red, size: 40),
