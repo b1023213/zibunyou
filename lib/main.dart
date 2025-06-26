@@ -22,12 +22,22 @@ class MyHomePage extends StatefulWidget {
   _MyHomePageState createState() => _MyHomePageState();
 }
 
-class _MyHomePageState extends State {
+class _MyHomePageState extends State<MyHomePage> {
   File? image;
   final picker = ImagePicker();
 
-  Future getImage() async {
+  Future getImageFromGallery() async {
     final XFile? _image = await picker.pickImage(source: ImageSource.gallery);
+
+    setState(() {
+      if (_image != null) {
+        image = File(_image.path);
+      }
+    });
+  }
+
+  Future getImageFromCamera() async {
+    final XFile? _image = await picker.pickImage(source: ImageSource.camera);
 
     setState(() {
       if (_image != null) {
@@ -39,17 +49,33 @@ class _MyHomePageState extends State {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('アルバムから画像を読み込む')),
+      appBar: AppBar(title: const Text('アルバム・カメラから画像を読み込む')),
       body: Center(
         child: image == null
             ? const Text('画像がありません')
             : Image.file(image!, fit: BoxFit.cover),
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () async {
-          getImage();
-        },
-        child: const Icon(Icons.photo),
+      floatingActionButton: Column(
+        mainAxisAlignment: MainAxisAlignment.end,
+        children: [
+          FloatingActionButton(
+            heroTag: 'gallery',
+            onPressed: () async {
+              await getImageFromGallery();
+            },
+            child: const Icon(Icons.photo),
+            tooltip: 'アルバムから選択',
+          ),
+          const SizedBox(height: 16),
+          FloatingActionButton(
+            heroTag: 'camera',
+            onPressed: () async {
+              await getImageFromCamera();
+            },
+            child: const Icon(Icons.camera_alt),
+            tooltip: 'カメラで撮影',
+          ),
+        ],
       ),
     );
   }
