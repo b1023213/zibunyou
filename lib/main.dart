@@ -1,7 +1,9 @@
 import 'dart:io';
-
 import 'package:flutter/material.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:geolocator/geolocator.dart';
 
 void main() {
   runApp(const MyApp());
@@ -16,62 +18,102 @@ class MyApp extends StatelessWidget {
   }
 }
 
+class ImageWithLocation {
+  final File image;
+  final LatLng location;
+  ImageWithLocation(this.image, this.location);
+}
+
 class MyHomePage extends StatefulWidget {
   const MyHomePage({Key? key}) : super(key: key);
   @override
-  _MyHomePageState createState() => _MyHomePageState();
+  State<MyHomePage> createState() => _MyHomePageState();
 }
 
 class _MyHomePageState extends State<MyHomePage> {
-  File? image;
   final picker = ImagePicker();
+  final List<ImageWithLocation> _images = [];
 
-  Future getImageFromGallery() async {
-    final XFile? _image = await picker.pickImage(source: ImageSource.gallery);
-
-    setState(() {
-      if (_image != null) {
-        image = File(_image.path);
-      }
-    });
-  }
-
-  Future getImageFromCamera() async {
-    final XFile? _image = await picker.pickImage(source: ImageSource.camera);
-
-    setState(() {
-      if (_image != null) {
-        image = File(_image.path);
-      }
-    });
+  Future<void> _getImage(ImageSource source) async {
+    LocationPermission permission = await Geolocator.requestPermission();
+    if (permission == LocationPermission.denied ||
+        permission == LocationPermission.deniedForever) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('位置情報の権限がありません')),
+      );
+      return;
+    }
+    final XFile? pickedFile = await picker.pickImage(source: source);
+    if (pickedFile != null) {
+      Position position = await Geolocator.getCurrentPosition();
+      setState(() {
+        _images.add(
+          ImageWithLocation(
+            File(pickedFile.path),
+            LatLng(position.latitude, position.longitude),
+          ),
+        );
+      });
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('アルバム・カメラから画像を読み込む')),
-      body: Center(
-        child: image == null
-            ? const Text('画像がありません')
-            : Image.file(image!, fit: BoxFit.cover),
+      appBar: AppBar(title: const Text('OpenStreetMapにピン止め')),
+      body: FlutterMap(
+        options: MapOptions(
+          initialCenter: LatLng(35.681236, 139.767125),
+          initialZoom: 12,
+        ),
+        children: [
+          TileLayer(
+            urlTemplate: "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+            userAgentPackageName: 'com.example.app',
+          ),
+          MarkerLayer(
+            markers: _images.asMap().entries.map((entry) {
+              int index = entry.key;
+              ImageWithLocation imgLoc = entry.value;
+              return Marker(
+                width: 40,
+                height: 40,
+                point: imgLoc.location,
+                child: GestureDetector(
+                  onTap: () {
+                    showDialog(
+                      context: context,
+                      builder: (_) => AlertDialog(
+                        content: Image.file(imgLoc.image),
+                      ),
+                    );
+                  },
+                  onLongPress: () {
+                    setState(() {
+                      _images.removeAt(index);
+                    });
+                  },
+                  child: const Icon(Icons.location_on,
+                      color: Colors.red, size: 40),
+                ),
+              );
+            }).toList(),
+          ),
+        ],
       ),
       floatingActionButton: Column(
         mainAxisAlignment: MainAxisAlignment.end,
         children: [
           FloatingActionButton(
             heroTag: 'gallery',
-            onPressed: () async {
-              await getImageFromGallery();
-            },
+            onPressed: () => _getImage(ImageSource.gallery),
             child: const Icon(Icons.photo),
             tooltip: 'アルバムから選択',
           ),
           const SizedBox(height: 16),
           FloatingActionButton(
             heroTag: 'camera',
-            onPressed: () async {
-              await getImageFromCamera();
-            },
+            onPressed: () => _getImage(ImageSource.camera),
             child: const Icon(Icons.camera_alt),
             tooltip: 'カメラで撮影',
           ),
