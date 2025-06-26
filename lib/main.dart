@@ -33,6 +33,7 @@ class MyHomePage extends StatefulWidget {
 class _MyHomePageState extends State<MyHomePage> {
   final picker = ImagePicker();
   final List<ImageWithLocation> _images = [];
+  final MapController _mapController = MapController(); // 追加
 
   Future<void> _getImage(ImageSource source) async {
     LocationPermission permission = await Geolocator.requestPermission();
@@ -57,11 +58,28 @@ class _MyHomePageState extends State<MyHomePage> {
     }
   }
 
+  Future<void> _moveToCurrentLocation() async {
+    LocationPermission permission = await Geolocator.requestPermission();
+    if (permission == LocationPermission.denied ||
+        permission == LocationPermission.deniedForever) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('位置情報の権限がありません')),
+      );
+      return;
+    }
+    Position position = await Geolocator.getCurrentPosition();
+    _mapController.move(
+      LatLng(position.latitude, position.longitude),
+      _mapController.camera.zoom,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('OpenStreetMapにピン止め')),
       body: FlutterMap(
+        mapController: _mapController, // 追加
         options: MapOptions(
           initialCenter: LatLng(35.681236, 139.767125),
           initialZoom: 12,
@@ -104,6 +122,13 @@ class _MyHomePageState extends State<MyHomePage> {
       floatingActionButton: Column(
         mainAxisAlignment: MainAxisAlignment.end,
         children: [
+          FloatingActionButton(
+            heroTag: 'location',
+            onPressed: _moveToCurrentLocation,
+            child: const Icon(Icons.my_location),
+            tooltip: '現在地に移動',
+          ),
+          const SizedBox(height: 16),
           FloatingActionButton(
             heroTag: 'gallery',
             onPressed: () => _getImage(ImageSource.gallery),
